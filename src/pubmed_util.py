@@ -37,7 +37,14 @@ def filter_results(search_terms):
 
 	# pandas dataframe of document info
 	doc_info = retrieve_doc_info(doc_ids)
-	print(search_terms, "Document Info", "(" + str(len(doc_info)) + " entries)", "Retrieved in", (time.time() - start) / 60, "min")
+	print(
+		search_terms,
+		"Document Info",
+		f"({len(doc_info)} entries)",
+		"Retrieved in",
+		(time.time() - start) / 60,
+		"min",
+	)
 
 	# Filters out results deemed irrelevant
 	start = time.time()
@@ -45,10 +52,7 @@ def filter_results(search_terms):
 	output = filt.filter(doc_info)
 	print("Data Converted in", (time.time() - start) / 60, "min")
 
-	# Reincorporate metadata
-	output_info = retrieve_doc_info(output['PMID'].tolist())
-
-	return output_info
+	return retrieve_doc_info(output['PMID'].tolist())
 
 
 def search_pubmed(search_terms):
@@ -77,10 +81,7 @@ def search_pubmed(search_terms):
 	# Recursively gets all objects where the tag is Id
 	elements = root.findall('.//Id')
 
-	# Converts all lxml objects to their text values
-	ids = [i.text for i in elements]
-
-	return ids
+	return [i.text for i in elements]
 
 
 def retrieve_doc_info(ids):
@@ -122,7 +123,7 @@ def retrieve_doc_info(ids):
 	for document in documents:
 
 		doc_id = int(document.find('.//PMID').text)
-		
+
 		paper = document.find('.//ArticleTitle').text
 
 		journal = document.find('.//Title').text
@@ -151,18 +152,18 @@ def retrieve_doc_info(ids):
 				qual_UIds.append(None)
 
 		new_row = {
-			'PMID' : doc_id,
-			'paper' : paper,
-			'journal' : journal,
-			'year' : year,
-			'abstract' : abstract,
-			'mesh_terms' : mesh_terms,
-			'mesh_UIds' : mesh_UIds,
-			'qual_terms' : qual_terms,
-			'qual_UIds' : qual_UIds,
-			'webpage' : 'https://www.ncbi.nlm.nih.gov/pubmed/' + str(doc_id)
+			'PMID': doc_id,
+			'paper': paper,
+			'journal': journal,
+			'year': year,
+			'abstract': abstract,
+			'mesh_terms': mesh_terms,
+			'mesh_UIds': mesh_UIds,
+			'qual_terms': qual_terms,
+			'qual_UIds': qual_UIds,
+			'webpage': f'https://www.ncbi.nlm.nih.gov/pubmed/{doc_id}',
 		}
-		
+
 		info = info.append(new_row, ignore_index = True)
 
 	info['PMID'] = info['PMID'].astype('int32')
@@ -224,10 +225,9 @@ def pubchem_SMILE(chem_id):
 
 	root = root = etree.fromstring(xml)
 
-	# Extracts the compound SMILE
-	SMILE = root.findall(".//{http://pubchem.ncbi.nlm.nih.gov/pug_rest}CanonicalSMILES")[0].xpath('.//text()')[0]
-
-	return SMILE
+	return root.findall(
+		".//{http://pubchem.ncbi.nlm.nih.gov/pug_rest}CanonicalSMILES"
+	)[0].xpath('.//text()')[0]
 
 
 # Constructs appropriate url for pubmed api from search terms
@@ -264,11 +264,10 @@ def construct_url(url_input, query_type, num_results = 1000000):
 		term_url = '%20AND%20'.join(adjusted_terms)
 
 		# Cap the number of results
-		results_num_url = '&retmax=' + str(num_results)
+		results_num_url = f'&retmax={str(num_results)}'
 
 		return base_url + term_url + results_num_url
 
-	# Constructs url for document query from list of pubmed document ids
 	elif query_type == 'document':
 		base_url = 'https://eutils.ncbi.nlm.nih.gov/entrez/eutils/efetch.fcgi?db=pubmed&id='
 
@@ -280,20 +279,19 @@ def construct_url(url_input, query_type, num_results = 1000000):
 			else:
 				doc_urls = doc_urls + "," + str(i)
 
-		url = base_url + doc_urls.lstrip(",") + '&retmode=xml'
-
-		return url
-	
-	# Constructs url for synonym search from a chemical string
+		return base_url + doc_urls.lstrip(",") + '&retmode=xml'
 	elif query_type == 'synonym':
-		url = "https://pubchem.ncbi.nlm.nih.gov/rest/pug/compound/name/" + url_input + "/synonyms/XML"
-		return url
-
-	# Constructs url for SMILE retrival from a pubchem id string
+		return (
+			"https://pubchem.ncbi.nlm.nih.gov/rest/pug/compound/name/"
+			+ url_input
+			+ "/synonyms/XML"
+		)
 	elif query_type == 'SMILE':
-		url = "https://pubchem.ncbi.nlm.nih.gov/rest/pug/compound/cid/" + url_input + "/property/CanonicalSMILES/XML"
-		return url
-
+		return (
+			"https://pubchem.ncbi.nlm.nih.gov/rest/pug/compound/cid/"
+			+ url_input
+			+ "/property/CanonicalSMILES/XML"
+		)
 	else:
 		print('Please enter a valid query type ("search", "document", "synonym", or "SMILE")')
 

@@ -11,16 +11,16 @@ from lxml import etree
 
 def cid2prop(cid, prop):
 	# Create url for InChI query
-	url = f"https://pubchem.ncbi.nlm.nih.gov/rest/pug/compound/cid/{str(int(cid))}/property/{prop}/JSON"
+	url = f"https://pubchem.ncbi.nlm.nih.gov/rest/pug/compound/cid/{int(cid)}/property/{prop}/JSON"
 
 	r = __safe_urlopen__(url)
 
 	if r is None:
 		return np.nan
-	
-	prop_value = __safe_object_access__(json.loads(r)['PropertyTable']['Properties'][0], prop)
-	
-	return prop_value
+
+	return __safe_object_access__(
+		json.loads(r)['PropertyTable']['Properties'][0], prop
+	)
 
 
 def cids2props(cids, prop, as_dict=False):
@@ -43,9 +43,7 @@ def cids2props(cids, prop, as_dict=False):
 	"""
 	cids = __divide_list__([str(int(i)) for i in cids])
 
-	if as_dict: props = {}
-	else: props = []
-
+	props = {} if as_dict else []
 	# Loop over divisions of ids to avoid overloading query
 	for ids in cids:
 
@@ -99,9 +97,7 @@ def cids2names(cids, as_dict=False):
 	"""
 	cids = __divide_list__([str(int(i)) for i in cids])
 
-	if as_dict: names = {}
-	else: names = []
-
+	names = {} if as_dict else []
 	# Loop over divisions of ids to avoid overloading query
 	for ids in cids:
 
@@ -128,15 +124,13 @@ def cids2names(cids, as_dict=False):
 
 
 def batch_error_handler(cids, prop, as_dict=False):
-	if as_dict: props = {}
-	else: props = []
-
+	props = {} if as_dict else []
 	for cid in cids:
 		val = cid2prop(cid, prop)
-		
+
 		if as_dict: props.update({cid : val})
 		else: props += [val]
-	
+
 	return props
 
 
@@ -160,13 +154,7 @@ def cids2inchis(cids, as_dict=False, use_prefix=False, keys = True):
 	        dictionary with CID's as keys and InChIKeys as values if as_dict is True, otherwise list
 	        of InChIKeys to preserve order
 	"""
-	if keys:
-		# Create url for InChIKey query
-		query_type = 'InChIKey'
-	else:
-		# Create url for InChI quer
-		query_type = 'InChI'
-	
+	query_type = 'InChIKey' if keys else 'InChI'
 	inchikeys = cids2props(cids, query_type, as_dict=as_dict)
 
 	if use_prefix:
@@ -177,21 +165,15 @@ def cids2inchis(cids, as_dict=False, use_prefix=False, keys = True):
 
 
 def __safe_object_access__(obj, key):
-	if key in obj:
-		return obj[key]
-	else:
-		return np.nan
+	return obj[key] if key in obj else np.nan
 
 
 def cids2upacs(cids, as_dict=False):
-	upacs = cids2props(cids, 'IUPACName', as_dict=as_dict)
-
-	return upacs
+	return cids2props(cids, 'IUPACName', as_dict=as_dict)
 
 
 def cids2smiles(cids, as_dict=False):
-	SMILES = cids2props(cids, 'CanonicalSMILES', as_dict=as_dict)
-	return SMILES
+	return cids2props(cids, 'CanonicalSMILES', as_dict=as_dict)
 
 
 # Divides list into even divisions with a maximum of 100 elements
@@ -242,7 +224,7 @@ def __safe_urlopen__(url):
 
 ### Antiquated and might be removed in future
 def cid2smile(cid):
-    """
+	"""
         Retrieves a chemical SMILE from Pubchem using a cid
 
         Input
@@ -255,17 +237,17 @@ def cid2smile(cid):
         SMILE : str or None
             Returns the chemical SMILE corresponding to the cid if it exists, else None
     """
-    url = "https://pubchem.ncbi.nlm.nih.gov/rest/pug/compound/cid/" + cid + "/property/CanonicalSMILES/XML"
-    
-    xml = __safe_urlopen__(url)
+	url = f"https://pubchem.ncbi.nlm.nih.gov/rest/pug/compound/cid/{cid}/property/CanonicalSMILES/XML"
 
-    if xml is None:
-        return np.nan
-    
-    root = etree.fromstring(xml)
-    SMILE = root.findall(".//{http://pubchem.ncbi.nlm.nih.gov/pug_rest}CanonicalSMILES")[0].xpath('.//text()')[0]
-    
-    return SMILE
+	xml = __safe_urlopen__(url)
+
+	if xml is None:
+	    return np.nan
+
+	root = etree.fromstring(xml)
+	return root.findall(
+		".//{http://pubchem.ncbi.nlm.nih.gov/pug_rest}CanonicalSMILES"
+	)[0].xpath('.//text()')[0]
 
 
 def mesh2pid(mesh):
@@ -286,37 +268,28 @@ def mesh2pid(mesh):
 
 	r = __safe_urlopen__(url)
 
-	if r is not None:
-		j = json.loads(r)
-
-		# No results from searching mesh id
-		if j['esearchresult']['count'] != 0:
-
-			sid = j['esearchresult']['idlist'][0] # get first sid result
-
-			url = f'https://pubchem.ncbi.nlm.nih.gov/rest/pug/substance/sid/{sid}/xml'
-
-			xml = __safe_urlopen__(url)
-
-			if xml is None:
-				return {mesh : {'mesh' : mesh, 'sid' : sid, 'cid' : cid}}
-
-			root = etree.fromstring(xml)
-
-			cids = root.findall(".//{http://www.ncbi.nlm.nih.gov}PC-CompoundType_id_cid")
-
-			if len(cids) > 0:
-				cid = cids[0].xpath('./text()')[0]
-			else:
-				cid = np.nan # No cids
-
-			return {mesh : {'mesh' : mesh, 'sid' : sid, 'cid' : cid}}
-
-		else:
-			return {mesh : {'mesh' : mesh, 'sid' : np.nan, 'cid' : np.nan}}
-
-	else:
+	if r is None:
 		return {mesh : {'mesh' : mesh, 'sid' : np.nan, 'cid' : np.nan}}
+	j = json.loads(r)
+
+	if j['esearchresult']['count'] == 0:
+		return {mesh : {'mesh' : mesh, 'sid' : np.nan, 'cid' : np.nan}}
+
+	sid = j['esearchresult']['idlist'][0] # get first sid result
+
+	url = f'https://pubchem.ncbi.nlm.nih.gov/rest/pug/substance/sid/{sid}/xml'
+
+	xml = __safe_urlopen__(url)
+
+	if xml is None:
+		return {mesh : {'mesh' : mesh, 'sid' : sid, 'cid' : cid}}
+
+	root = etree.fromstring(xml)
+
+	cids = root.findall(".//{http://www.ncbi.nlm.nih.gov}PC-CompoundType_id_cid")
+
+	cid = cids[0].xpath('./text()')[0] if len(cids) > 0 else np.nan
+	return {mesh : {'mesh' : mesh, 'sid' : sid, 'cid' : cid}}
 
 
 def cid2tax(cid, taxonomy='ChEBI'):
@@ -331,17 +304,15 @@ def cid2tax(cid, taxonomy='ChEBI'):
 	# I think should only have one occurrence of taxonomy source name
 	raw_tax = [all_taxonomies[t] for t in range(len(all_taxonomies)) if all_taxonomies[t]['SourceName'] == taxonomy]
 
-	if len(raw_tax) == 0: return np.nan
+	if not raw_tax: return np.nan
 	else: raw_tax = raw_tax[0]
 
 	nodes = raw_tax['Node']
-	tax = []
-
 	chebi_name = lambda x: x['Information']['Name']
 	chebi_id = lambda x: int(x['Information']['URL'].lstrip('http://www.ebi.ac.uk/chebi/searchId.do?chebiId=CHEBI:'))
 
 	last_node = nodes[0]['NodeID']
-	tax.append( (chebi_name(nodes[0]), chebi_id(nodes[0])) )
+	tax = [(chebi_name(nodes[0]), chebi_id(nodes[0]))]
 	n=1
 
 	while int(last_node.lstrip('node_')) >= int(nodes[n]['NodeID'].lstrip('node_')):

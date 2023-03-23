@@ -75,15 +75,13 @@ def __clean_term__(term, convert_letter = True, w_space = True, is_url=True):
 
     """
     term = term.lower().strip()
-    
+
     term = __greek_letter_converter__(term, convert_letter=convert_letter)
-    
+
     # Keeps spaces in string
     if w_space:
         if is_url:
             term = term.replace(' ', '%20') # To replace ' ' in request
-        else:
-            pass
     else:
         term = term.replace(' ', '')
     return term
@@ -156,11 +154,8 @@ def __exact_retrieval__(req):
 
 def __is_nutrient__(term):
     general_terms = ['protein', 'fat', 'sugar', 'carbohydrate', 'fiber', 'ash']
-    
-    if sum([1 for t in general_terms if t in term]) > 0:
-        return True
-    else:
-        return False
+
+    return sum(t in term for t in general_terms) > 0
 
 
 def __clean_compound_name__(s):
@@ -195,10 +190,7 @@ def __complex_string_equivalence__(s1, s2):
     s2 = __clean_compound_name__(s2)
 
     # Calculates fuzz ratio (Levenshtein Distance)
-    if fuzz.ratio(''.join(s1.split()), ''.join(s2.split())) >= 98:
-        return True
-    else:
-        return False
+    return fuzz.ratio(''.join(s1.split()), ''.join(s2.split())) >= 98
 
 
 # Examples https://eutils.ncbi.nlm.nih.gov/entrez/eutils/esearch.fcgi?db=pccompound&term=allicin&retmode=json
@@ -295,10 +287,7 @@ def get_compound_pubchem_info(chem):
 # Evaluates if a cell already contains a key. If not, and if there is a match, insert a key
 def __check_key__(row, id_col, str_col, input_dict):
     if np.isnan(row[id_col]):
-        if row[str_col] in input_dict:
-            return input_dict[row[str_col]]
-        else:
-            return np.nan
+        return input_dict[row[str_col]] if row[str_col] in input_dict else np.nan
     else:
         return row[id_col]
     
@@ -392,16 +381,13 @@ def append_pubchem_id(df, chem_key):
     df['pubchem_id'] = df['pubchem_id'].astype(object)
     df['pubchem_name'] = df['pubchem_name'].astype(object)
 
-    i = 0
-    for idx, row in df.iterrows():
+    for i, (idx, row) in enumerate(df.iterrows()):
         ID, name = get_compound_pubchem_info(row[chem_key])
         df.at[idx, 'pubchem_id'] = ID
         df.at[idx, 'pubchem_name'] = name
-        
+
         if not i % 1000:
             print(idx, 'chems searched in', (time.time() - start) / 60, "min")
-
-        i += 1
 
     print("Pubchem ids added in", (time.time() - start) / 60, "min")
 

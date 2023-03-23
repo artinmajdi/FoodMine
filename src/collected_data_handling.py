@@ -27,34 +27,32 @@ def build_data_dict(df):
 
     df['chemical'] = df['chemical'].str.strip()
     df['chemical'] = df['chemical'].apply(greek_letter_converter, convert_letter = True)
-    
+
     # Iterate over each unique food, and each unique chemical per food to create food, chem dict
     for food in df['food'].drop_duplicates().tolist():
-        
+
         chem_dict = {}   # Holds chemical calculations per food
-        
+
         # need to do one loop for things with a chem id
         for chem_id in df[(df['food'] == food) & (df['chem_id'].notnull())].chem_id.drop_duplicates().tolist():
 
             f_chem_df = df[(df['food'] == food) & (df['chem_id'] == chem_id)]   # Filters DataFrame for rows with specific food-chemical combination
-            
+
             new_entry = __build_chem_subdict__(f_chem_df)  # Reformats and calculates values from separate resources as dict
 
             chem_dict[new_entry['chemical']] = new_entry
-        
+
         for chem in df[(df['food'] == food) & (df['chem_id'].isnull())].chemical.drop_duplicates().tolist():
 
             f_chem_df = df[(df['food'] == food) & (df['chemical'] == chem)]   # Filters DataFrame for rows with specific food-chemical combination
-            
+
             new_entry = __build_chem_subdict__(f_chem_df)  # Reformats and calculates values from separate resources as dict
-            
+
             chem_dict[new_entry['chemical']] = new_entry
 
         data_dict[food] = chem_dict
-    
-    data_df = dict_to_df(data_dict)
 
-    return data_df
+    return dict_to_df(data_dict)
 
 
 def dict_to_df(data_dict):
@@ -104,11 +102,11 @@ def __extract_digits__(string):
     """
     
     i = 0
-    
+
     while string[i].isdigit():
         i += 1
-    
-    return int(string[0:i])
+
+    return int(string[:i])
 
 
 def __splice_unit__(unit):
@@ -221,7 +219,7 @@ def __unit_handler__(value, unit, target_unit):
     if unit.count('/') is not target_unit.count('/'):
         print("Unit conversion error, one is not fraction")
         return
-    
+
     if unit.count('/') > 0:
 
         # Check if the first character of digit is string, assumed conversion value if it is
@@ -232,24 +230,21 @@ def __unit_handler__(value, unit, target_unit):
         target_denom_scale, target_denom_unit = __splice_unit__(target_unit.split('/')[1])
 
         # Handles the scale conversion not relating to units
-        if denom_scale / target_denom_scale is not 1:
-            if num_scale / target_num_scale is not 1:
-                scale_conversion = (num_scale / target_num_scale) / (denom_scale / target_denom_scale)
-            else:
-                scale_conversion = 1 / (denom_scale / target_denom_scale)
-        else:
+        if denom_scale / target_denom_scale is 1:
             scale_conversion = num_scale / target_num_scal
 
 
+        elif num_scale / target_num_scale is not 1:
+            scale_conversion = (num_scale / target_num_scale) / (denom_scale / target_denom_scale)
+        else:
+            scale_conversion = 1 / (denom_scale / target_denom_scale)
         # Receives numerical scales from converter. For __converter__('mg', 'g'), returns 1000
         num_unit_conversion = __converter__(num_unit, target_num_unit)
         denom_unit_conversion = __converter__(denom_unit, target_denom_unit)
 
         unit_conversion = num_unit_conversion / denom_unit_conversion
 
-        value_conversion = value * scale_conversion * unit_conversion
-
-        return value_conversion
+        return value * scale_conversion * unit_conversion
     
 
 def __quant_handler__(df):
@@ -272,37 +267,34 @@ def __quant_handler__(df):
 
     absolute_min = None
     absolute_max = None
-    
+
     means =[]
-    
+
     # Calculate avg mean
     for paper_id in df.PMID.drop_duplicates().tolist():
         
         paper_values = []
-        
+
         for _, row in df[df['PMID'] == paper_id].iterrows():
             
             conversion = __unit_handler__(row['amount'], row['units'], target_unit)	# Sets the units for the whole output
-            
+
             # If there is an error or issue in __unit_handler__, will return some sort of string
             if type(conversion) is not str:
-            
+
                 # Keeps track of the global min and max for a chemical
                 if absolute_min is None:
                     absolute_min = conversion
                     absolute_max = conversion
                 else:
-                    if absolute_min > conversion:
-                        absolute_min = conversion
-                    if absolute_max < conversion:
-                        absolute_max = conversion
-
+                    absolute_min = min(absolute_min, conversion)
+                    absolute_max = max(absolute_max, conversion)
                 paper_values.append(conversion)
-            
+
         # Calculates average of means from papers
-        if len(paper_values) > 0:
+        if paper_values:
             means.append(sum(paper_values) / len(paper_values))
-    
+
     if len(means) is not 0:
         avg_mean = np.mean(means)
         min_mean = np.min(means)
@@ -315,19 +307,17 @@ def __quant_handler__(df):
         max_mean = None
         mean_var = None
         median = None 
-    
-    quant_pack = {
-        'average_mean' : avg_mean,
-        'absolute_min' : absolute_min,
-        'absolute_max' : absolute_max,
-        'min_mean' : min_mean,
-        'max_mean' : max_mean,
-        'mean_variance' : mean_var,
-        'median' : median,
-        'units' : target_unit
-    }
 
-    return quant_pack
+    return {
+        'average_mean': avg_mean,
+        'absolute_min': absolute_min,
+        'absolute_max': absolute_max,
+        'min_mean': min_mean,
+        'max_mean': max_mean,
+        'mean_variance': mean_var,
+        'median': median,
+        'units': target_unit,
+    }
 
 
 def __build_chem_subdict__(df):
@@ -352,22 +342,22 @@ def __build_chem_subdict__(df):
     # Number of unique papers
     num_papers = len(df.PMID.drop_duplicates())
     papers = df.PMID.drop_duplicates().tolist()
-    
+
     # Number of terms quantified
     num_terms_quant = df.amount.notnull().sum()
-    
+
     # avg mean, total min, total max, min mean, max mean, mean variance
     quant_pack = __quant_handler__(df[df['amount'].notnull()])
-    
+
     # total # samples
     total_num_samples = df.num_samples.notnull().sum()
-    
+
     # Number without info on total # samples
     num_without_sample_info = df.num_samples.isnull().sum()
-    
+
     # Number without quantity or sample info
     num_lacking_info = len(df[(df['num_samples'].isnull()) & (df['amount'].isnull())])
-    
+
     if len(df[df.pubchem_name.notnull()]) > 0:
         compound_name = df['pubchem_name'].tolist()[0]
     else:
@@ -382,7 +372,7 @@ def __build_chem_subdict__(df):
         'pubchem_id' : df.pubchem_id.tolist()[0]
     }
 
-    chem_subdict.update(quant_pack)
+    chem_subdict |= quant_pack
 
     return chem_subdict
 

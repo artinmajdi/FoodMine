@@ -102,18 +102,14 @@ class Filter():
 			self.input_data = input_data
 
 		self.data = pd.DataFrame()
-		
+
 		start = time()
 		print('Creating features...')
 
 		# Builds features for each row of data
 		for idx, row in tqdm(self.input_data.iterrows()):
 
-			if row['abstract'] == None:
-				abstract = ''
-			else:
-				abstract = row['abstract']
-			
+			abstract = '' if row['abstract'] is None else row['abstract']
 			mesh_terms = ' '.join(row['mesh_terms'])
 
 			# Combine all info into a single string
@@ -133,14 +129,10 @@ class Filter():
 				'PMID' : row['PMID']
 			}
 
-			data_row.update(pubmed_features)
+			data_row |= pubmed_features
 
 			# Use variable classes if data is training data, otherwise just mark as useful for search
-			if is_traindata:
-				data_row['class'] = row['is_useful']
-			else:
-				data_row['class'] = 1
-
+			data_row['class'] = row['is_useful'] if is_traindata else 1
 			# Add the existence of measurement methods as different features
 			for method in self.measurement_matchers.keys():
 				data_row[method] = measurement_detection[method]
@@ -157,11 +149,11 @@ class Filter():
 
 		# Specifies criteria for filtration
 		dictionary_condition = '((int(row["gen_term_count"]) > 0) + (int(row["food_term_count"]) > 0) + (int(row["chem_term_count"]) > 0) + (int(row["sci_term_count"]) > 0) > 1)'
-		
+
 		# Dynamically builds the measurement conditions based on different measurement methods
 		measurement_condition = ''
 		for method in self.measurement_matchers.keys():
-			
+
 			if measurement_condition == '':
 				measurement_condition += '((int(row["' + method + '"]) == 1)'
 			else:
@@ -171,7 +163,7 @@ class Filter():
 
 		# Creates the logical pattern to be used as a filter function in the Model class
 		self.extract_pattern = {
-			dictionary_condition + ' & ' +  measurement_condition : 'True'
+			f'{dictionary_condition} & {measurement_condition}': 'True'
 		}
 
 
@@ -199,14 +191,12 @@ class Filter():
 		if self.eval_sci_matches == True:
 			sci_term_count = self.__matches__(self.sci_matcher, text)
 
-		pubmed_features = {
-			'gen_term_count' : gen_term_count,
-			'food_term_count' : food_term_count,
-			'sci_term_count' : sci_term_count,
-			'chem_term_count' : chem_term_count
+		return {
+			'gen_term_count': gen_term_count,
+			'food_term_count': food_term_count,
+			'sci_term_count': sci_term_count,
+			'chem_term_count': chem_term_count,
 		}
-
-		return pubmed_features
 
 
 	# Determines if a word is present in paper abstract or mesh terms
@@ -232,11 +222,7 @@ class Filter():
 		match = matcher(self.nlp(text))
 
 		# Returns 1 if there are any matches, else 0
-		if len(match) > 0:
-			return 1
-
-		else:
-			return 0
+		return 1 if len(match) > 0 else 0
 
 
 	def __matches__(self, matcher, text):
@@ -261,9 +247,7 @@ class Filter():
 
 		matches = matcher(text)
 
-		match_count = len(matches)
-
-		return match_count
+		return len(matches)
 
 
 	def __matcher_from_list__(self, dictionary):

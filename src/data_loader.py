@@ -43,17 +43,15 @@ def greek_letter_converter(chem, convert_letter = True):
 # Clean terms for various file applications
 def clean_term(term, convert_letter = True, w_space = True, is_url=True):
     term = term.lower().strip()
-    
+
     if convert_letter:
         term = greek_letter_converter(term)
     else:
         term = greek_letter_converter(term, convert_letter=False)
-    
+
     if w_space:
         if is_url:
             term = term.replace(' ', '%20') # To replace ' ' in request
-        else:
-            pass
     else:
         term = term.replace(' ', '')
     return term
@@ -72,7 +70,7 @@ def id_loader(df, chem_key, load, file, fdb=True, pubchem=True):
 
 def load_raw_data(food, load):
     food_data = pd.read_csv(config.mfp(f'data/{food}_data.csv'), encoding='latin1')
-    
+
     food_scoring = pd.read_csv(config.mfp(f'data/{food}_scoring.csv'), encoding='latin1')
 
     # Need to remove phenol explorer ids that were manually put into data (for garlic only)
@@ -82,12 +80,21 @@ def load_raw_data(food, load):
     food_data.amount = food_data.amount.str.replace(',', '')
 
     food_data = food_data.merge(food_scoring[['PMID','is_useful']], how = 'left', on = 'PMID')
-    
+
     if report:
-        report_stat(f'Number of papers in search {food}: ' + str(len(food_scoring)), f'num_papers_srch_{food}.txt')
-        report_stat(f'Number of papers reviewed {food}: ' + str(len(food_scoring[food_scoring.is_useful.notnull()])), f'num_reviewed_papers_{food}.txt')
+        report_stat(
+            f'Number of papers in search {food}: {len(food_scoring)}',
+            f'num_papers_srch_{food}.txt',
+        )
+        report_stat(
+            f'Number of papers reviewed {food}: {len(food_scoring[food_scoring.is_useful.notnull()])}',
+            f'num_reviewed_papers_{food}.txt',
+        )
         report_stat(f'Number of unique papers {food}: ' + str(len(food_data['PMID'].drop_duplicates())), f'num_unique_papers_{food}.txt')
-        report_stat(f'Total number of records {food}: ' + str(len(food_data)), f'num_records_{food}.txt')
+        report_stat(
+            f'Total number of records {food}: {len(food_data)}',
+            f'num_records_{food}.txt',
+        )
 
     return food_data, food_scoring
 
@@ -147,25 +154,20 @@ def partition_raw_data(food_data, food_scoring):
         except:
             print(row['units'])
 
-        if row['units'].count('g') > 1:
-            food_data.at[idx, 'is_quant'] = 1
-        else:
-            food_data.at[idx, 'is_quant'] = 0
-
+        food_data.at[idx, 'is_quant'] = 1 if row['units'].count('g') > 1 else 0
     # Remove all rows where the units are %'s
     food_data_q = food_data[food_data['is_quant'] == 1].reset_index(drop=True)
 
     # Have a separate dataframe for all chemicals that we would put in the category of 'detected but not quantified'
     food_data_dnq = food_data[food_data['is_quant'] == 0].reset_index(drop=True)
 
-     # The quantified dataframe for values that are both quantified and unquantified
     unq_chems = list(set( food_data_dnq['chemical'].tolist() ))
     food_data_both = food_data_q.iloc[[idx for idx, row in food_data_q.fillna('placeholder').iterrows() if row['chemical'] in unq_chems]]
 
     # Remove occurrences of overlaping chemicals from the unquantified garlic data
     q_chems = list(set( food_data_q['chemical'].tolist() ))
     food_data_dnq = food_data_dnq.iloc[[idx for idx, row in food_data_dnq.fillna('placeholder').iterrows() if row['chemical'] not in q_chems]]
-    
+
     return food_data_q, food_data_dnq
 
 
@@ -176,15 +178,18 @@ def build_food_mine(food_data, food_data_q, food_data_dnq):
     quant_food_mine = cdh.build_data_dict(food_data_q)
 
     unquant_food_mine = cdh.build_data_dict(food_data_dnq)
-    
+
     # Need to re-compare quantified chems and unquantified chems with synonym key to do one last removal
     q_chems = list(set( quant_food_mine['chem_id'].dropna().tolist() ))
     unquant_food_mine = unquant_food_mine[~unquant_food_mine.chem_id.isin(q_chems)].reset_index()
-    
+
     if report:
-        report_stat(f'FM size {food}: ' + str(len(food_mine)), f'fm_size_{food}.txt')
-        report_stat(f'QFM size {food}: ' + str(len(quant_food_mine)), f'qfm_size_{food}.txt')
-        report_stat(f'UQFM size {food}: ' + str(len(unquant_food_mine)), f'uqfm_size_{food}.txt')
+        report_stat(f'FM size {food}: {len(food_mine)}', f'fm_size_{food}.txt')
+        report_stat(f'QFM size {food}: {len(quant_food_mine)}', f'qfm_size_{food}.txt')
+        report_stat(
+            f'UQFM size {food}: {len(unquant_food_mine)}',
+            f'uqfm_size_{food}.txt',
+        )
 
     return food_mine, quant_food_mine, unquant_food_mine
 
@@ -192,7 +197,7 @@ def build_food_mine(food_data, food_data_q, food_data_dnq):
 # Loads data from FooDB
 def load_foodb_data(food, load):
     # Dataframe with contents of foodb
-    
+
     if not load:
         foodb = pd.read_csv(config.mfp('data/contentssql.csv'))
         foodb = foodb[(foodb.source_type != 'Nutrient') & (foodb.source_id != 0) & (foodb.standard_content != 0)]
@@ -201,13 +206,13 @@ def load_foodb_data(food, load):
 
         foodb = foodb.merge(compounds[['id', 'name']], how='left', left_on='source_id', right_on='id')
 
-        if food == 'garlic':
-            # Garlic - ["Garlic", "Soft-necked Garlic"]
-            target_foodb_food_id = [8, 880]
-
         if food == 'cocoa':
             # Cocoa - ["cocoa bean", "cocoa butter", "Cocoa powder", "Cocoa Liquor"]
             target_foodb_food_id = [182, 706, 707,708]
+
+        elif food == 'garlic':
+            # Garlic - ["Garlic", "Soft-necked Garlic"]
+            target_foodb_food_id = [8, 880]
 
         # Gets the subset of the database pertaining to food
         foodb_food = foodb[foodb.food_id.isin(target_foodb_food_id)].reset_index(drop=True)
@@ -216,11 +221,11 @@ def load_foodb_data(food, load):
         foodb_food.name = foodb_food.name.str.lower()
 
         foodb_food = foodb_food.rename(index=str, columns={"source_id": "foodb_id"})
-    
+
     if load:
         foodb_food = pd.read_pickle(config.mfp(f'data/{food}_foodb_food.pkl'))
         foodb_food.rename(columns={'orig_source_name' : 'name'}, inplace=True)
-                
+
     foodb_food = id_loader(foodb_food, 'name', load, f'{food}_foodb_food.pkl',fdb=False)
 
     # Creates a list of the unique chemicals in garlic from foodb
@@ -231,16 +236,25 @@ def load_foodb_data(food, load):
 
     # Creates a separate dataframe that holds chemicals for garlic in foodb without a real quantification
     unquant_foodb_food = foodb_food[foodb_food.standard_content.isnull()][['chem_id', 'chem_id_f', 'orig_source_id','name', 'standard_content']].reset_index()
-    
+
     q_ids = list(set( quant_foodb_food.chem_id.tolist() ))
     q_names = list(set( quant_foodb_food.chem_id_f.tolist() ))
     unquant_foodb_food = unquant_foodb_food[(~unquant_foodb_food.chem_id.fillna('-').isin(q_ids))
                                            & (~unquant_foodb_food.chem_id_f.fillna('-').isin(q_names))]
-    
+
     if report:
-        report_stat(f'FDB size {food}: ' + str(len(foodb_food.chem_id.drop_duplicates())), f'fdb_size_{food}.txt')
-        report_stat(f'QFDB size {food}: ' + str(len(quant_foodb_food.chem_id.drop_duplicates())), f'qfdb_size_{food}.txt')
-        report_stat(f'UQFDB size {food}: ' + str(len(unquant_foodb_food.chem_id.drop_duplicates())), f'uqfdb_size_{food}.txt')
+        report_stat(
+            f'FDB size {food}: {len(foodb_food.chem_id.drop_duplicates())}',
+            f'fdb_size_{food}.txt',
+        )
+        report_stat(
+            f'QFDB size {food}: {len(quant_foodb_food.chem_id.drop_duplicates())}',
+            f'qfdb_size_{food}.txt',
+        )
+        report_stat(
+            f'UQFDB size {food}: {len(unquant_foodb_food.chem_id.drop_duplicates())}',
+            f'uqfdb_size_{food}.txt',
+        )
 
     return foodb_food, quant_foodb_food, unquant_foodb_food
 
@@ -248,15 +262,15 @@ def load_foodb_data(food, load):
 ###### Loads USDA data
 def load_usda_data(food, load):
     if not load:
-        if food == 'garlic':
-            # Garlic, 'Garlic, raw', 'Spices, garlic powder'
-            NDB_id = [11215, 2020]
-
         if food == 'cocoa':
             # Cocoa, 'Oil, cocoa butter', 'Cocoa, dry powder, Hershey's European style cocoa', 
             # 'Cocoa, dry powder, unsweetened', 'Cocoa, dry powder, unsweetend, processed with alkali',
             # 'Cocoa, dry powder, hi-fat or breakfast, processed with alkali'
             NDB_id = [4501, 19171, 19165, 19166, 19860]
+
+        elif food == 'garlic':
+            # Garlic, 'Garlic, raw', 'Spices, garlic powder'
+            NDB_id = [11215, 2020]
 
         # Reads in USDA database
         usda = pd.read_csv(config.mfp('data/SR28_plus_flav.csv'), encoding = 'latin1')
@@ -285,14 +299,14 @@ def load_usda_data(food, load):
         usda = pd.read_pickle(config.mfp(f'data/{food}_usda.pkl'))
     else:
         usda = id_loader(usda, 'nut_desc', load, f'{food}_usda.pkl').reset_index(drop=True)
-        
+
     usda.rename(columns={'foodb_id' : 'chem_id_f'}, inplace=True)
-        
+
     usda = usda[~usda.unit.isin(['IU', 'kcal', 'kJ'])].reset_index(drop=True)
 
     if report:
-        report_stat(f'USDA size {food}: ' + str(len(usda)), f'usda_size_{food}.txt')
-        
+        report_stat(f'USDA size {food}: {len(usda)}', f'usda_size_{food}.txt')
+
     return usda
 
 
